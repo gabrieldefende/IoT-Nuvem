@@ -1,0 +1,31 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Ambiente / segredos
+.env
+.env.local
+*.pem
+
+# Modelos DeepFace (baixar localmente, ~550 MB)
+.deepface/
+
+# Build / cache
+flowly_frontend/build/
+flowly_mobal/build/
+flowly_mobal/.dart_tool/
+flowly_api/uploads/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

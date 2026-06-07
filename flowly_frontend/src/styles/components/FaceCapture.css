@@ -15,17 +15,31 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.face-capture-video,
-.face-capture-preview {
+.face-capture-video {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
 }
 
+.face-capture-video--hidden {
+  visibility: hidden;
+}
+
+.face-capture-preview-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+
 .face-capture-loading {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;

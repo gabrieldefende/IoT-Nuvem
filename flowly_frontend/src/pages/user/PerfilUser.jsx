@@ -181,12 +181,10 @@ function PerfilUser() {
               </form>
             </section>
 
-            {tipo !== 'admin' && (
-              <FaceProfileEnroll
-                enrolled={faceEnrolled}
-                onEnrolled={() => setFaceEnrolled(true)}
-              />
-            )}
+            <FaceProfileEnroll
+              enrolled={faceEnrolled}
+              onEnrolled={() => setFaceEnrolled(true)}
+            />
 
             <section className="perfil-card">
               <h3>Redefinir Senha</h3>

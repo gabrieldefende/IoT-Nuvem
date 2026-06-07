@@ -3,6 +3,7 @@ import apiClient from '../../config/apiClient';
 import { API_ENDPOINTS } from '../../config/config';
 import { authUtils } from '../../config/authUtils';
 import FaceCapture from './FaceCapture';
+import { getFaceErrorMessage } from '../../utils/faceErrorMessages';
 import '../../styles/components/FaceAuthStep.css';
 
 function FaceAuthStep({
@@ -15,6 +16,7 @@ function FaceAuthStep({
   const [imageBase64, setImageBase64] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const isVerify = mode === 'verify';
 
   const finishLogin = (data) => {
     authUtils.saveAuthData(data.token, data.user);
@@ -59,13 +61,12 @@ function FaceAuthStep({
 
       finishLogin(res.data);
     } catch (err) {
-      setErro(err.response?.data?.erro || 'Falha na verificação facial.');
+      setErro(getFaceErrorMessage(err, isVerify ? 'verify' : 'enroll'));
     } finally {
       setLoading(false);
     }
   };
 
-  const isVerify = mode === 'verify';
   const title = isVerify ? 'Verificação facial' : 'Cadastro facial (opcional)';
   const subtitle = isVerify
     ? `Olá, ${user?.nome || 'usuário'}. Confirme sua identidade para concluir o login.`
@@ -81,7 +82,12 @@ function FaceAuthStep({
       {erro && <div className="erro-container">{erro}</div>}
 
       <FaceCapture
-        onCapture={setImageBase64}
+        onCapture={(img) => {
+          setImageBase64(img);
+          if (!img) {
+            setErro('');
+          }
+        }}
         disabled={loading}
         buttonLabel={isVerify ? 'Capturar para verificar' : 'Capturar rosto'}
       />

@@ -58,15 +58,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Administradores e fluxo legado: JWT direto (sem verificação facial)
-    if (user.tipo === 'admin') {
-      const token = issueAuthToken(user);
-      return res.json({
-        token,
-        user: buildUserPayload(user),
-      });
-    }
-
     const faceProfile = await FaceProfile.findOne({ userId: user._id, enrolled: true });
 
     if (faceProfile) {

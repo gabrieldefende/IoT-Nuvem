@@ -6,6 +6,7 @@ const {
   issueAuthToken,
   verifyFaceSessionToken,
 } = require('../utils/faceAuth');
+const { normalizeFaceError } = require('../utils/faceErrorMessages');
 
 const completeLoginResponse = (user) => ({
   token: issueAuthToken(user),
@@ -64,14 +65,12 @@ exports.enrollWithSession = async (req, res) => {
       return res.status(404).json({ erro: 'Usuário não encontrado.' });
     }
 
-    if (user.tipo === 'admin') {
-      return res.status(403).json({ erro: 'Cadastro facial não disponível para administradores.' });
-    }
-
-    const embedResult = await faceService.extractEmbedding(imageBase64);
+    const embedResult = await faceService.extractEmbedding(imageBase64, 'enroll');
 
     if (!embedResult.face_detected || !embedResult.embedding) {
-      return res.status(400).json({ erro: embedResult.erro || 'Nenhum rosto detectado.' });
+      return res.status(400).json({
+        erro: normalizeFaceError(embedResult.erro, 'enroll'),
+      });
     }
 
     await saveFaceProfile(user._id, embedResult.embedding, embedResult.model);
@@ -82,7 +81,10 @@ exports.enrollWithSession = async (req, res) => {
     });
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ erro: err.message || 'Erro ao cadastrar rosto.', detalhe: err.details });
+    res.status(status).json({
+      erro: normalizeFaceError(err.message, 'enroll') || 'Erro ao cadastrar rosto.',
+      detalhe: err.details,
+    });
   }
 };
 
@@ -100,14 +102,12 @@ exports.enrollFromProfile = async (req, res) => {
       return res.status(404).json({ erro: 'Usuário não encontrado.' });
     }
 
-    if (user.tipo === 'admin') {
-      return res.status(403).json({ erro: 'Cadastro facial não disponível para administradores.' });
-    }
-
-    const embedResult = await faceService.extractEmbedding(imageBase64);
+    const embedResult = await faceService.extractEmbedding(imageBase64, 'profile');
 
     if (!embedResult.face_detected || !embedResult.embedding) {
-      return res.status(400).json({ erro: embedResult.erro || 'Nenhum rosto detectado.' });
+      return res.status(400).json({
+        erro: normalizeFaceError(embedResult.erro, 'profile'),
+      });
     }
 
     await saveFaceProfile(user._id, embedResult.embedding, embedResult.model);
@@ -118,7 +118,10 @@ exports.enrollFromProfile = async (req, res) => {
     });
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ erro: err.message || 'Erro ao cadastrar rosto.', detalhe: err.details });
+    res.status(status).json({
+      erro: normalizeFaceError(err.message, 'profile') || 'Erro ao cadastrar rosto.',
+      detalhe: err.details,
+    });
   }
 };
 
@@ -141,12 +144,14 @@ exports.verifyWithSession = async (req, res) => {
     const verifyResult = await faceService.verifyFace(profile.embedding, imageBase64);
 
     if (!verifyResult.face_detected) {
-      return res.status(400).json({ erro: verifyResult.erro || 'Nenhum rosto detectado.' });
+      return res.status(400).json({
+        erro: normalizeFaceError(verifyResult.erro, 'verify'),
+      });
     }
 
     if (!verifyResult.match) {
       return res.status(401).json({
-        erro: 'Rosto não reconhecido. Acesso negado.',
+        erro: 'Rosto não reconhecido. Tente capturar outra foto com o rosto bem visível.',
         distance: verifyResult.distance,
       });
     }
@@ -157,7 +162,10 @@ exports.verifyWithSession = async (req, res) => {
     });
   } catch (err) {
     const status = err.statusCode || 500;
-    res.status(status).json({ erro: err.message || 'Erro na verificação facial.', detalhe: err.details });
+    res.status(status).json({
+      erro: normalizeFaceError(err.message, 'verify') || 'Erro na verificação facial.',
+      detalhe: err.details,
+    });
   }
 };
 

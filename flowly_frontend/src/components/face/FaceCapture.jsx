@@ -13,42 +13,68 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraReady(false);
   }, []);
 
-  useEffect(() => {
-    let active = true;
+  const isStreamAlive = useCallback(() => {
+    const stream = streamRef.current;
+    if (!stream) {
+      return false;
+    }
+    return stream.getVideoTracks().some((track) => track.readyState === 'live');
+  }, []);
 
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false,
-        });
+  const attachStream = useCallback((stream) => {
+    streamRef.current = stream;
 
-        if (!active) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
+    stream.getVideoTracks().forEach((track) => {
+      track.onended = () => {
+        setCameraReady(false);
+      };
+    });
 
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        setCameraReady(true);
-        setCameraError('');
-      } catch (error) {
-        setCameraError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
+    }
+
+    setCameraReady(true);
+    setCameraError('');
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    if (isStreamAlive()) {
+      if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch(() => {});
       }
-    };
+      setCameraReady(true);
+      setCameraError('');
+      return;
+    }
 
+    stopCamera();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+
+      attachStream(stream);
+    } catch (error) {
+      setCameraError('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+      setCameraReady(false);
+    }
+  }, [attachStream, isStreamAlive, stopCamera]);
+
+  useEffect(() => {
     startCamera();
-
-    return () => {
-      active = false;
-      stopCamera();
-    };
-  }, [stopCamera]);
+    return stopCamera;
+  }, [startCamera, stopCamera]);
 
   const handleCapture = () => {
     const video = videoRef.current;
@@ -66,33 +92,45 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
     onCapture(imageBase64);
   };
 
+  const handleRetake = async () => {
+    setPreview('');
+    onCapture('');
+
+    if (!isStreamAlive()) {
+      await startCamera();
+    }
+  };
+
   return (
     <div className="face-capture">
       {cameraError && <div className="face-capture-error">{cameraError}</div>}
 
-      {!preview ? (
-        <div className="face-capture-video-wrap">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="face-capture-video"
+      <div className="face-capture-video-wrap">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="face-capture-video"
+        />
+        {preview && (
+          <img
+            src={preview}
+            alt="Prévia do rosto capturado"
+            className="face-capture-preview-overlay"
           />
-          {!cameraReady && !cameraError && (
-            <p className="face-capture-loading">Iniciando câmera...</p>
-          )}
-        </div>
-      ) : (
-        <img src={preview} alt="Prévia do rosto capturado" className="face-capture-preview" />
-      )}
+        )}
+        {!cameraReady && !cameraError && !preview && (
+          <p className="face-capture-loading">Iniciando câmera...</p>
+        )}
+      </div>
 
       <div className="face-capture-actions">
         <button
           type="button"
           className="glass-btn primary"
           onClick={handleCapture}
-          disabled={disabled || !cameraReady}
+          disabled={disabled || !cameraReady || !!preview}
         >
           {buttonLabel}
         </button>
@@ -100,7 +138,7 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
           <button
             type="button"
             className="glass-btn secondary"
-            onClick={() => setPreview('')}
+            onClick={handleRetake}
             disabled={disabled}
           >
             Tirar outra foto

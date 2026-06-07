@@ -1,8 +1,9 @@
 const config = require('../config/config');
+const { normalizeFaceError } = require('../utils/faceErrorMessages');
 
 const FACE_SERVICE_TIMEOUT_MS = 120000;
 
-const callFaceService = async (path, body) => {
+const callFaceService = async (path, body, context = 'default') => {
   const baseUrl = config.face.serviceUrl.replace(/\/+$/, '');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FACE_SERVICE_TIMEOUT_MS);
@@ -18,7 +19,9 @@ const callFaceService = async (path, body) => {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const error = new Error(data.erro || 'Falha ao comunicar com serviço facial.');
+      const error = new Error(
+        normalizeFaceError(data.erro, context) || 'Falha ao comunicar com serviço facial.'
+      );
       error.statusCode = response.status >= 400 ? response.status : 502;
       error.details = data;
       throw error;
@@ -52,14 +55,18 @@ exports.checkHealth = async () => {
   return response.json();
 };
 
-exports.extractEmbedding = async (imageBase64) => {
-  return callFaceService('/embed', { image_base64: imageBase64 });
+exports.extractEmbedding = async (imageBase64, context = 'enroll') => {
+  return callFaceService('/embed', { image_base64: imageBase64 }, context);
 };
 
 exports.verifyFace = async (referenceEmbedding, imageBase64) => {
-  return callFaceService('/verify', {
-    reference_embedding: referenceEmbedding,
-    image_base64: imageBase64,
-    threshold: config.face.matchThreshold,
-  });
+  return callFaceService(
+    '/verify',
+    {
+      reference_embedding: referenceEmbedding,
+      image_base64: imageBase64,
+      threshold: config.face.matchThreshold,
+    },
+    'verify'
+  );
 };

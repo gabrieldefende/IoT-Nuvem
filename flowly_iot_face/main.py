@@ -34,6 +34,33 @@ def decode_image_to_path(image_base64: str) -> str:
     return tmp.name
 
 
+def format_face_error(exc: Exception) -> str:
+    message = str(exc).lower()
+
+    if "face could not be detected" in message or "no face" in message:
+        return (
+            "Não foi possível identificar um rosto na foto. "
+            "Posicione-se de frente à câmera, com boa iluminação, e tente novamente."
+        )
+
+    if "multiple faces" in message or "more than one face" in message:
+        return (
+            "Mais de um rosto foi detectado na imagem. "
+            "Certifique-se de que apenas você apareça na foto."
+        )
+
+    if "could not be detected" in message:
+        return (
+            "Não foi possível identificar um rosto na foto. "
+            "Capture outra imagem com o rosto bem visível e centralizado."
+        )
+
+    return (
+        "Não foi possível processar a foto. "
+        "Tire outra imagem com o rosto bem visível e tente novamente."
+    )
+
+
 def cosine_distance(source: np.ndarray, probe: np.ndarray) -> float:
     source = source.astype(np.float64)
     probe = probe.astype(np.float64)
@@ -90,7 +117,7 @@ def embed():
             }
         )
     except Exception as exc:
-        return jsonify({"face_detected": False, "erro": str(exc)}), 400
+        return jsonify({"face_detected": False, "erro": format_face_error(exc)}), 400
     finally:
         if os.path.exists(image_path):
             os.unlink(image_path)
@@ -126,7 +153,9 @@ def verify():
             }
         )
     except Exception as exc:
-        return jsonify({"match": False, "face_detected": False, "erro": str(exc)}), 400
+        return jsonify(
+            {"match": False, "face_detected": False, "erro": format_face_error(exc)}
+        ), 400
     finally:
         if os.path.exists(image_path):
             os.unlink(image_path)

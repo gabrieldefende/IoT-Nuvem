@@ -2,6 +2,7 @@ import { useState } from 'react';
 import apiClient from '../../config/apiClient';
 import { API_ENDPOINTS } from '../../config/config';
 import FaceCapture from './FaceCapture';
+import { getFaceErrorMessage } from '../../utils/faceErrorMessages';
 import '../../styles/components/FaceAuthStep.css';
 
 function FaceProfileEnroll({ enrolled, onEnrolled }) {
@@ -28,7 +29,7 @@ function FaceProfileEnroll({ enrolled, onEnrolled }) {
         onEnrolled();
       }
     } catch (err) {
-      setErro(err.response?.data?.erro || 'Erro ao cadastrar verificação facial.');
+      setErro(getFaceErrorMessage(err, 'profile'));
     } finally {
       setLoading(false);
     }
@@ -47,7 +48,13 @@ function FaceProfileEnroll({ enrolled, onEnrolled }) {
       {mensagem && <p className="perfil-sucesso">{mensagem}</p>}
 
       <FaceCapture
-        onCapture={setImageBase64}
+        onCapture={(img) => {
+          setImageBase64(img);
+          if (!img) {
+            setErro('');
+            setMensagem('');
+          }
+        }}
         disabled={loading}
         buttonLabel="Capturar rosto"
       />

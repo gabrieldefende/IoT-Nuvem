@@ -4,9 +4,11 @@ Expõe endpoints para extrair embeddings e comparar rostos via DeepFace.
 """
 
 import base64
+import logging
 import os
 import tempfile
 
+import cv2
 import numpy as np
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
@@ -14,12 +16,18 @@ from flask_cors import CORS
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 CORS(app)
 
 MODEL = os.getenv("FACE_MODEL", "VGG-Face")
 DETECTOR = os.getenv("FACE_DETECTOR", "opencv")
 DEFAULT_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.4"))
+VERIFY_THRESHOLD = float(os.getenv("FACE_VERIFY_THRESHOLD", os.getenv("FACE_MATCH_THRESHOLD", "0.5")))
+
+_FACE_CASCADE = None
 
 
 def decode_image_to_path(image_base64: str) -> str:
@@ -71,7 +79,44 @@ def cosine_distance(source: np.ndarray, probe: np.ndarray) -> float:
     return 1.0 - (dot / norm)
 
 
+def get_face_cascade():
+    global _FACE_CASCADE
+    if _FACE_CASCADE is None:
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        _FACE_CASCADE = cv2.CascadeClassifier(cascade_path)
+    return _FACE_CASCADE
+
+
+def has_detectable_face(image_path: str) -> bool:
+    image = cv2.imread(image_path)
+    if image is None:
+        return False
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    faces = get_face_cascade().detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=4,
+        minSize=(30, 30),
+    )
+    return len(faces) > 0
+
+
+def warmup_model() -> None:
+    try:
+        from deepface import DeepFace
+
+        logger.info("Pré-carregando modelo facial %s...", MODEL)
+        DeepFace.build_model(MODEL)
+        logger.info("Modelo facial pronto.")
+    except Exception as exc:
+        logger.warning("Não foi possível pré-carregar o modelo: %s", exc)
+
+
 def extract_embedding(image_path: str) -> list[float]:
+    if not has_detectable_face(image_path):
+        raise ValueError("Face could not be detected")
+
     from deepface import DeepFace
 
     results = DeepFace.represent(
@@ -94,6 +139,7 @@ def health():
             "model": MODEL,
             "detector": DETECTOR,
             "threshold_default": DEFAULT_THRESHOLD,
+            "verify_threshold": VERIFY_THRESHOLD,
         }
     )
 
@@ -123,30 +169,25 @@ def embed():
             os.unlink(image_path)
 
 
-@app.post("/verify")
-def verify():
-    data = request.get_json(silent=True) or {}
-    reference = data.get("reference_embedding")
-    image_base64 = data.get("image_base64")
-    threshold = float(data.get("threshold", DEFAULT_THRESHOLD))
-
-    if reference is None or not image_base64:
-        return jsonify(
-            {"erro": "reference_embedding e image_base64 são obrigatórios."}
-        ), 400
-
+def verify_against_references(references, image_base64, threshold):
     image_path = decode_image_to_path(image_base64)
     try:
         probe_embedding = extract_embedding(image_path)
-        ref = np.array(reference, dtype=np.float64)
         probe = np.array(probe_embedding, dtype=np.float64)
-        distance = cosine_distance(ref, probe)
-        match = distance <= threshold
+
+        best_distance = 1.0
+        for reference in references:
+            ref = np.array(reference, dtype=np.float64)
+            distance = cosine_distance(ref, probe)
+            if distance < best_distance:
+                best_distance = distance
+
+        match = best_distance <= threshold
 
         return jsonify(
             {
                 "match": bool(match),
-                "distance": round(distance, 6),
+                "distance": round(best_distance, 6),
                 "threshold": threshold,
                 "face_detected": True,
                 "model": MODEL,
@@ -161,7 +202,38 @@ def verify():
             os.unlink(image_path)
 
 
+@app.post("/verify")
+def verify():
+    data = request.get_json(silent=True) or {}
+    reference = data.get("reference_embedding")
+    image_base64 = data.get("image_base64")
+    threshold = float(data.get("threshold", VERIFY_THRESHOLD))
+
+    if reference is None or not image_base64:
+        return jsonify(
+            {"erro": "reference_embedding e image_base64 são obrigatórios."}
+        ), 400
+
+    return verify_against_references([reference], image_base64, threshold)
+
+
+@app.post("/verify-multi")
+def verify_multi():
+    data = request.get_json(silent=True) or {}
+    references = data.get("reference_embeddings")
+    image_base64 = data.get("image_base64")
+    threshold = float(data.get("threshold", VERIFY_THRESHOLD))
+
+    if not isinstance(references, list) or len(references) == 0 or not image_base64:
+        return jsonify(
+            {"erro": "reference_embeddings e image_base64 são obrigatórios."}
+        ), 400
+
+    return verify_against_references(references, image_base64, threshold)
+
+
 if __name__ == "__main__":
+    warmup_model()
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "5001"))
     app.run(host=host, port=port, debug=os.getenv("FLASK_DEBUG", "0") == "1")

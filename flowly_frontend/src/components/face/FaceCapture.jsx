@@ -1,12 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import FaceLoadingSpinner from './FaceLoadingSpinner';
 import '../../styles/components/FaceCapture.css';
 
-function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rosto' }) {
+const DUAL_STEPS = [
+  {
+    key: 'front',
+    buttonLabel: 'Capturar foto de frente',
+    tip: 'Olhe de frente para a câmera, com o rosto centralizado na moldura.',
+  },
+  {
+    key: 'side',
+    buttonLabel: 'Capturar foto levemente de lado',
+    tip: 'Gire levemente a cabeça (~15°) mantendo o rosto visível.',
+  },
+];
+
+function FaceCapture({
+  onCapture,
+  disabled = false,
+  buttonLabel = 'Capturar rosto',
+  captureMode = 'single',
+  processing = false,
+  processingLabel = 'Processando...',
+}) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [preview, setPreview] = useState('');
+  const [captureStep, setCaptureStep] = useState(0);
+  const [dualCaptures, setDualCaptures] = useState([]);
+
+  const isDual = captureMode === 'dual';
+  const currentDualStep = DUAL_STEPS[captureStep] || DUAL_STEPS[0];
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -76,9 +102,16 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
     return stopCamera;
   }, [startCamera, stopCamera]);
 
+  const resetCapture = useCallback(() => {
+    setPreview('');
+    setCaptureStep(0);
+    setDualCaptures([]);
+    onCapture(isDual ? [] : '');
+  }, [isDual, onCapture]);
+
   const handleCapture = () => {
     const video = videoRef.current;
-    if (!video || !cameraReady) {
+    if (!video || !cameraReady || processing) {
       return;
     }
 
@@ -89,21 +122,45 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageBase64 = canvas.toDataURL('image/jpeg', 0.92);
     setPreview(imageBase64);
-    onCapture(imageBase64);
+
+    if (!isDual) {
+      onCapture(imageBase64);
+      return;
+    }
+
+    const nextCaptures = [...dualCaptures, imageBase64];
+    setDualCaptures(nextCaptures);
+
+    if (nextCaptures.length < DUAL_STEPS.length) {
+      setCaptureStep(nextCaptures.length);
+      setPreview('');
+      return;
+    }
+
+    onCapture(nextCaptures);
   };
 
   const handleRetake = async () => {
-    setPreview('');
-    onCapture('');
+    resetCapture();
 
     if (!isStreamAlive()) {
       await startCamera();
     }
   };
 
+  const activeButtonLabel = isDual ? currentDualStep.buttonLabel : buttonLabel;
+  const showPreview = Boolean(preview);
+  const dualProgress = isDual ? `${Math.min(dualCaptures.length + (preview ? 1 : 0), 2)}/2` : null;
+
   return (
     <div className="face-capture">
       {cameraError && <div className="face-capture-error">{cameraError}</div>}
+
+      {isDual && (
+        <p className="face-capture-tip">
+          Foto {dualProgress}: {currentDualStep.tip}
+        </p>
+      )}
 
       <div className="face-capture-video-wrap">
         <video
@@ -113,14 +170,20 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
           muted
           className="face-capture-video"
         />
-        {preview && (
+        {!showPreview && !processing && <div className="face-capture-oval" aria-hidden="true" />}
+        {showPreview && (
           <img
             src={preview}
             alt="Prévia do rosto capturado"
             className="face-capture-preview-overlay"
           />
         )}
-        {!cameraReady && !cameraError && !preview && (
+        {processing && (
+          <div className="face-capture-processing-overlay">
+            <FaceLoadingSpinner label={processingLabel} />
+          </div>
+        )}
+        {!cameraReady && !cameraError && !showPreview && !processing && (
           <p className="face-capture-loading">Iniciando câmera...</p>
         )}
       </div>
@@ -130,16 +193,16 @@ function FaceCapture({ onCapture, disabled = false, buttonLabel = 'Capturar rost
           type="button"
           className="glass-btn primary"
           onClick={handleCapture}
-          disabled={disabled || !cameraReady || !!preview}
+          disabled={disabled || processing || !cameraReady || (showPreview && !isDual)}
         >
-          {buttonLabel}
+          {activeButtonLabel}
         </button>
-        {preview && (
+        {(showPreview || dualCaptures.length > 0) && (
           <button
             type="button"
             className="glass-btn secondary"
             onClick={handleRetake}
-            disabled={disabled}
+            disabled={disabled || processing}
           >
             Tirar outra foto
           </button>

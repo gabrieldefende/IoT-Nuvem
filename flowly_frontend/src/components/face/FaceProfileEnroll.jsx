@@ -1,19 +1,22 @@
 import { useState } from 'react';
-import apiClient from '../../config/apiClient';
+import apiClient, { FACE_API_TIMEOUT_MS } from '../../config/apiClient';
 import { API_ENDPOINTS } from '../../config/config';
 import FaceCapture from './FaceCapture';
+import FaceLoadingSpinner from './FaceLoadingSpinner';
 import { getFaceErrorMessage } from '../../utils/faceErrorMessages';
 import '../../styles/components/FaceAuthStep.css';
 
 function FaceProfileEnroll({ enrolled, onEnrolled }) {
-  const [imageBase64, setImageBase64] = useState('');
+  const [capturePayload, setCapturePayload] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
 
+  const hasRequiredCapture = Array.isArray(capturePayload) && capturePayload.length === 2;
+
   const handleSubmit = async () => {
-    if (!imageBase64) {
-      setErro('Capture uma foto do rosto antes de salvar.');
+    if (!hasRequiredCapture) {
+      setErro('Capture as duas fotos do rosto antes de salvar.');
       return;
     }
 
@@ -22,9 +25,13 @@ function FaceProfileEnroll({ enrolled, onEnrolled }) {
     setMensagem('');
 
     try {
-      await apiClient.post(API_ENDPOINTS.FACE_ENROLL_PROFILE, { imageBase64 });
+      await apiClient.post(
+        API_ENDPOINTS.FACE_ENROLL_PROFILE,
+        { imagesBase64: capturePayload },
+        { timeout: FACE_API_TIMEOUT_MS }
+      );
       setMensagem('Verificação facial cadastrada com sucesso.');
-      setImageBase64('');
+      setCapturePayload([]);
       if (onEnrolled) {
         onEnrolled();
       }
@@ -40,27 +47,33 @@ function FaceProfileEnroll({ enrolled, onEnrolled }) {
       <h3>Verificação facial</h3>
       <p className="face-profile-desc">
         {enrolled
-          ? 'Seu rosto já está cadastrado. Você pode recadastrar para atualizar a referência.'
-          : 'Cadastre seu rosto para usar verificação facial no login (opcional).'}
+          ? 'Seu rosto já está cadastrado. Recadastre com duas fotos para melhorar o reconhecimento.'
+          : 'Cadastre duas fotos do rosto para usar verificação facial no login (opcional).'}
       </p>
 
       {erro && <p className="perfil-erro">{erro}</p>}
       {mensagem && <p className="perfil-sucesso">{mensagem}</p>}
 
       <FaceCapture
-        onCapture={(img) => {
-          setImageBase64(img);
-          if (!img) {
+        captureMode="dual"
+        onCapture={(payload) => {
+          setCapturePayload(Array.isArray(payload) ? payload : []);
+          if (!payload || payload.length === 0) {
             setErro('');
             setMensagem('');
           }
         }}
         disabled={loading}
-        buttonLabel="Capturar rosto"
+        processing={loading}
+        processingLabel="Salvando rosto..."
       />
 
-      <button type="button" onClick={handleSubmit} disabled={loading || !imageBase64}>
-        {loading ? 'Salvando...' : enrolled ? 'Atualizar rosto' : 'Cadastrar verificação facial'}
+      <button type="button" onClick={handleSubmit} disabled={loading || !hasRequiredCapture}>
+        {loading ? (
+          <FaceLoadingSpinner label="Salvando..." />
+        ) : (
+          enrolled ? 'Atualizar rosto' : 'Cadastrar verificação facial'
+        )}
       </button>
     </section>
   );

@@ -17,7 +17,8 @@ const app = express();
 
 // Middleware
 app.use(cors({ origin: config.corsOrigin }));
-app.use(express.json());
+app.use(express.json({ limit: config.bodySizeLimit }));
+app.use(express.urlencoded({ extended: true, limit: config.bodySizeLimit }));
 
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

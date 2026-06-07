@@ -12,6 +12,10 @@ const faceProfileSchema = new mongoose.Schema(
       type: [Number],
       required: true,
     },
+    embeddings: {
+      type: [[Number]],
+      default: undefined,
+    },
     model: {
       type: String,
       default: 'VGG-Face',

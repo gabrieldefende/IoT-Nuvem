@@ -12,6 +12,9 @@ const MULTIPLE_FACES_PATTERNS = [
   'mais de um rosto',
 ];
 
+const DUPLICATE_FACE_MESSAGE =
+  'Este rosto já está vinculado a outra conta Flowly. Use apenas uma conta por pessoa ou entre com a conta original.';
+
 const CONTEXT_MESSAGES = {
   verify: {
     faceNotDetected:
@@ -41,6 +44,15 @@ function matchesAnyPattern(message, patterns) {
 }
 
 export function getFaceErrorMessage(err, context = 'enroll') {
+  const codigo = err?.response?.data?.codigo;
+  if (codigo === 'FACE_DUPLICATE') {
+    return DUPLICATE_FACE_MESSAGE;
+  }
+
+  if (err?.code === 'ECONNABORTED' || String(err?.message || '').toLowerCase().includes('timeout')) {
+    return 'A verificação facial está demorando mais que o normal. Aguarde o processamento terminar e tente novamente.';
+  }
+
   const raw =
     err?.response?.data?.erro ||
     err?.response?.data?.error ||
@@ -53,6 +65,14 @@ export function getFaceErrorMessage(err, context = 'enroll') {
 
   const message = String(raw).toLowerCase();
   const contextMessages = CONTEXT_MESSAGES[context] || CONTEXT_MESSAGES.enroll;
+
+  if (
+    message.includes('já está vinculado') ||
+    message.includes('ja esta vinculado') ||
+    message.includes('outra conta flowly')
+  ) {
+    return DUPLICATE_FACE_MESSAGE;
+  }
 
   if (matchesAnyPattern(message, MULTIPLE_FACES_PATTERNS)) {
     return contextMessages.multipleFaces;

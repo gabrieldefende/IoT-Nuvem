@@ -65,7 +65,19 @@ exports.verifyFace = async (referenceEmbedding, imageBase64) => {
     {
       reference_embedding: referenceEmbedding,
       image_base64: imageBase64,
-      threshold: config.face.matchThreshold,
+      threshold: config.face.verifyThreshold,
+    },
+    'verify'
+  );
+};
+
+exports.verifyFaceMulti = async (referenceEmbeddings, imageBase64) => {
+  return callFaceService(
+    '/verify-multi',
+    {
+      reference_embeddings: referenceEmbeddings,
+      image_base64: imageBase64,
+      threshold: config.face.verifyThreshold,
     },
     'verify'
   );

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import apiClient from '../../config/apiClient';
+import apiClient, { FACE_API_TIMEOUT_MS } from '../../config/apiClient';
 import { API_ENDPOINTS } from '../../config/config';
 import { authUtils } from '../../config/authUtils';
 import FaceCapture from './FaceCapture';
+import FaceLoadingSpinner from './FaceLoadingSpinner';
 import { getFaceErrorMessage } from '../../utils/faceErrorMessages';
 import '../../styles/components/FaceAuthStep.css';
 
@@ -13,10 +14,14 @@ function FaceAuthStep({
   onComplete,
   onCancel,
 }) {
-  const [imageBase64, setImageBase64] = useState('');
+  const [capturePayload, setCapturePayload] = useState(mode === 'verify' ? '' : []);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const isVerify = mode === 'verify';
+
+  const hasRequiredCapture = isVerify
+    ? Boolean(capturePayload)
+    : Array.isArray(capturePayload) && capturePayload.length === 2;
 
   const finishLogin = (data) => {
     authUtils.saveAuthData(data.token, data.user);
@@ -40,8 +45,12 @@ function FaceAuthStep({
   };
 
   const handleSubmit = async () => {
-    if (!imageBase64) {
-      setErro('Capture uma foto do rosto antes de continuar.');
+    if (!hasRequiredCapture) {
+      setErro(
+        isVerify
+          ? 'Capture uma foto do rosto antes de continuar.'
+          : 'Capture as duas fotos do rosto antes de continuar.'
+      );
       return;
     }
 
@@ -54,10 +63,11 @@ function FaceAuthStep({
           ? API_ENDPOINTS.FACE_VERIFY
           : API_ENDPOINTS.FACE_ENROLL;
 
-      const res = await apiClient.post(endpoint, {
-        faceSessionToken,
-        imageBase64,
-      });
+      const body = isVerify
+        ? { faceSessionToken, imageBase64: capturePayload }
+        : { faceSessionToken, imagesBase64: capturePayload };
+
+      const res = await apiClient.post(endpoint, body, { timeout: FACE_API_TIMEOUT_MS });
 
       finishLogin(res.data);
     } catch (err) {
@@ -70,7 +80,7 @@ function FaceAuthStep({
   const title = isVerify ? 'Verificação facial' : 'Cadastro facial (opcional)';
   const subtitle = isVerify
     ? `Olá, ${user?.nome || 'usuário'}. Confirme sua identidade para concluir o login.`
-    : 'Você pode cadastrar seu rosto para uma camada extra de segurança no login.';
+    : 'Cadastre duas fotos do rosto para uma camada extra de segurança no login.';
 
   return (
     <div className="face-auth-step">
@@ -82,14 +92,17 @@ function FaceAuthStep({
       {erro && <div className="erro-container">{erro}</div>}
 
       <FaceCapture
-        onCapture={(img) => {
-          setImageBase64(img);
-          if (!img) {
+        captureMode={isVerify ? 'single' : 'dual'}
+        onCapture={(payload) => {
+          setCapturePayload(payload);
+          if (!payload || (Array.isArray(payload) && payload.length === 0)) {
             setErro('');
           }
         }}
         disabled={loading}
-        buttonLabel={isVerify ? 'Capturar para verificar' : 'Capturar rosto'}
+        processing={loading}
+        processingLabel={isVerify ? 'Verificando...' : 'Cadastrando...'}
+        buttonLabel={isVerify ? 'Capturar para verificar' : undefined}
       />
 
       <div className="face-auth-buttons">
@@ -97,9 +110,13 @@ function FaceAuthStep({
           type="button"
           className="glass-btn primary"
           onClick={handleSubmit}
-          disabled={loading || !imageBase64}
+          disabled={loading || !hasRequiredCapture}
         >
-          {loading ? 'Processando...' : isVerify ? 'Verificar e entrar' : 'Cadastrar e entrar'}
+          {loading ? (
+            <FaceLoadingSpinner label={isVerify ? 'Verificando...' : 'Cadastrando...'} />
+          ) : (
+            isVerify ? 'Verificar e entrar' : 'Cadastrar e entrar'
+          )}
         </button>
 
         {!isVerify && (
